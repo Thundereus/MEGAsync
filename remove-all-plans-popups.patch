@@ -1,0 +1,54 @@
+diff --git a/src/MEGASync/MegaApplication.cpp b/src/MEGASync/MegaApplication.cpp
+index 0e25c61..8e371ea 100644
+--- a/src/MEGASync/MegaApplication.cpp
++++ b/src/MEGASync/MegaApplication.cpp
+@@ -1347,7 +1347,9 @@ void MegaApplication::start()
+             mDiscountStateMachine,
+             &DiscountStateMachine::userActive);
+ 
+-    mDiscountStateMachine->start();
++    // Targeted discount offer popup disabled: the state machine is never started,
++    // so it never reaches the state that opens the offer dialog.
++    // mDiscountStateMachine->start();
+ 
+     updateTrayIcon();
+ 
+@@ -2442,7 +2444,7 @@ void MegaApplication::checkOverStorageStates(bool isOnboardingAboutClosing)
+             {
+                 preferences->setOverStorageDialogExecution(QDateTime::currentMSecsSinceEpoch());
+                 mStatsEventHandler->sendEvent(AppStatsEvents::EventType::OVER_STORAGE_DIAL);
+-                showUpsellDialog(UpsellPlans::ViewMode::STORAGE_FULL);
++                // Automatic subscription plans popup removed (storage full)
+             }
+             else
+             {
+@@ -2500,7 +2502,7 @@ void MegaApplication::checkOverStorageStates(bool isOnboardingAboutClosing)
+             {
+                 preferences->setAlmostOverStorageDialogExecution(
+                     QDateTime::currentMSecsSinceEpoch());
+-                showUpsellDialog(UpsellPlans::ViewMode::STORAGE_ALMOST_FULL);
++                // Automatic subscription plans popup removed (storage almost full)
+             }
+             else
+             {
+diff --git a/src/MEGASync/TransferQuota.cpp b/src/MEGASync/TransferQuota.cpp
+index 9f7989e..604c74a 100644
+--- a/src/MEGASync/TransferQuota.cpp
++++ b/src/MEGASync/TransferQuota.cpp
+@@ -115,15 +115,7 @@ void TransferQuota::checkExecuteDialog()
+         MegaSyncApp->getStatsEventHandler()->sendEvent(
+             AppStatsEvents::EventType::TRSF_OVER_QUOTA_DIAL);
+ 
+-        const auto endWaitTimeSinceEpoch(mWaitTimeUntil.time_since_epoch());
+-        const auto endWaitTimeSinceEpochSeconds(
+-            std::chrono::duration_cast<std::chrono::seconds>(endWaitTimeSinceEpoch).count());
+-
+-        MegaSyncApp->showUpsellDialog(UpsellPlans::ViewMode::TRANSFER_EXCEEDED);
+-        if (auto dialogInfo = DialogOpener::findDialog<QmlDialogWrapper<UpsellComponent>>())
+-        {
+-            dialogInfo->getDialog()->wrapper()->setTransferFinishTime(endWaitTimeSinceEpochSeconds);
+-        }
++        // Automatic subscription plans popup removed (transfer quota exceeded)
+     }
+ }
+ 
