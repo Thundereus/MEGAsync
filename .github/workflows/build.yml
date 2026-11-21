@@ -23,6 +23,19 @@ jobs:
           git apply remove-all-plans-popups.patch
           git diff --stat
 
+      - name: Add the ATL part of the VS2019 toolset (MEGA's libraries ask for it)
+        shell: pwsh
+        run: |
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          Write-Host "Visual Studio is at: $vsPath"
+          $p = Start-Process -Wait -PassThru -FilePath "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe" -ArgumentList @(
+            'modify', '--installPath', "`"$vsPath`"",
+            '--add', 'Microsoft.VisualStudio.Component.VC.14.29.16.11.x86.x64',
+            '--add', 'Microsoft.VisualStudio.Component.VC.14.29.16.11.ATL',
+            '--quiet', '--norestart', '--nocache')
+          Write-Host "Installer finished with exit code $($p.ExitCode)"
+          Get-ChildItem -Recurse -Filter atlbase.h "$vsPath\VC\Tools\MSVC" -ErrorAction SilentlyContinue | Select-Object -First 5 FullName
+
       - name: Install Qt 5.15
         uses: jurplel/install-qt-action@v4
         with:
@@ -38,22 +51,37 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg-mega
           C:\vcpkg-mega\bootstrap-vcpkg.bat -disableMetrics
 
-      - name: Cache vcpkg packages
-        uses: actions/cache@v4
+      - name: Restore vcpkg package cache
+        uses: actions/cache/restore@v4
         with:
           path: ~\AppData\Local\vcpkg\archives
-          key: vcpkg-archives-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'src/MEGASync/mega/vcpkg.json') }}
+          key: vcpkg-archives-${{ runner.os }}-${{ github.run_id }}
           restore-keys: vcpkg-archives-${{ runner.os }}-
 
       - name: Configure (this builds all the libraries, it is slow)
         shell: pwsh
         run: |
-          cmake -G "Visual Studio 17 2022" -A x64 `
-            -DENABLE_DESIGN_TOKENS_IMPORTER=OFF `
-            -DENABLE_DESKTOP_APP_TESTS=OFF `
-            -DVCPKG_ROOT=C:\vcpkg-mega `
-            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
-            -S . -B build-x64-windows-mega
+          # GitHub sometimes answers 503 for downloads, so try a few times.
+          # Libraries that already finished are not rebuilt on a retry.
+          $ok = $false
+          for ($i = 1; $i -le 3 -and -not $ok; $i++) {
+            Write-Host "Configure attempt $i of 3"
+            cmake -G "Visual Studio 17 2022" -A x64 `
+              -DENABLE_DESIGN_TOKENS_IMPORTER=OFF `
+              -DENABLE_DESKTOP_APP_TESTS=OFF `
+              -DVCPKG_ROOT=C:\vcpkg-mega `
+              -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+              -S . -B build-x64-windows-mega
+            if ($LASTEXITCODE -eq 0) { $ok = $true } else { Start-Sleep -Seconds 60 }
+          }
+          if (-not $ok) { exit 1 }
+
+      - name: Save vcpkg package cache (even if a later step fails)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: vcpkg-archives-${{ runner.os }}-${{ github.run_id }}
 
       - name: Build
         shell: pwsh
