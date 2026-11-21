@@ -1,0 +1,80 @@
+name: Build MEGAsync for Windows (no plans popups)
+
+# Run it by hand: Actions tab -> "Build MEGAsync for Windows" -> Run workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Get the MEGA SDK (submodule)
+        shell: bash
+        run: git submodule update --init --recursive src/MEGASync/mega
+
+      - name: Apply the popup-removal patch
+        shell: bash
+        run: |
+          git apply --check remove-all-plans-popups.patch
+          git apply remove-all-plans-popups.patch
+          git diff --stat
+
+      - name: Install Qt 5.15
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 5.15.2
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Get vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg-mega
+          C:\vcpkg-mega\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: vcpkg-archives-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'src/MEGASync/mega/vcpkg.json') }}
+          restore-keys: vcpkg-archives-${{ runner.os }}-
+
+      - name: Configure (this builds all the libraries, it is slow)
+        shell: pwsh
+        run: |
+          cmake -G "Visual Studio 17 2022" -A x64 `
+            -DENABLE_DESIGN_TOKENS_IMPORTER=OFF `
+            -DENABLE_DESKTOP_APP_TESTS=OFF `
+            -DVCPKG_ROOT=C:\vcpkg-mega `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+            -S . -B build-x64-windows-mega
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build-x64-windows-mega --config RelWithDebInfo --target MEGAsync --parallel
+
+      - name: Collect Qt files next to the exe
+        shell: pwsh
+        run: |
+          $exeDir = "build-x64-windows-mega\src\MEGASync\RelWithDebInfo"
+          Get-ChildItem $exeDir | Select-Object -First 50
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --no-translations --no-compiler-runtime `
+            --no-system-d3d-compiler --no-webkit2 --no-qmltooling --no-patchqt `
+            --no-designercomponents --dir $exeDir `
+            --qmldir src\MEGASync\gui\qml\ "$exeDir\MEGAsync.exe"
+          Copy-Item "$env:QT_ROOT_DIR\bin\opengl32sw.dll" $exeDir -ErrorAction SilentlyContinue
+
+      - name: Upload the finished app
+        uses: actions/upload-artifact@v4
+        with:
+          name: MEGAsync-no-popups-win64
+          path: |
+            build-x64-windows-mega/src/MEGASync/RelWithDebInfo/
+            !build-x64-windows-mega/src/MEGASync/RelWithDebInfo/*.pdb
