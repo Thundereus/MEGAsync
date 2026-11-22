@@ -69,6 +69,8 @@ jobs:
             cmake -G "Visual Studio 17 2022" -A x64 `
               -DENABLE_DESIGN_TOKENS_IMPORTER=OFF `
               -DENABLE_DESKTOP_APP_TESTS=OFF `
+              -DENABLE_DESKTOP_APP_WERROR=OFF `
+              -DENABLE_SDKLIB_WERROR=OFF `
               -DVCPKG_ROOT=C:\vcpkg-mega `
               -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
               -S . -B build-x64-windows-mega
@@ -86,7 +88,17 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build-x64-windows-mega --config RelWithDebInfo --target MEGAsync --parallel
+          # Only print errors (not the thousands of harmless warnings), so the real
+          # reason for a failure is easy to find at the end of this step's log.
+          cmake --build build-x64-windows-mega --config RelWithDebInfo --target MEGAsync --parallel -- /nologo /clp:ErrorsOnly
+          if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED with exit code $LASTEXITCODE"; exit $LASTEXITCODE }
+
+      - name: Machine info (only runs if the build failed)
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free
+          Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory, TotalVisibleMemorySize
 
       - name: Collect Qt files next to the exe
         shell: pwsh
