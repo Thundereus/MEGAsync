@@ -71,6 +71,7 @@ jobs:
               -DENABLE_DESKTOP_APP_TESTS=OFF `
               -DENABLE_DESKTOP_APP_WERROR=OFF `
               -DENABLE_SDKLIB_WERROR=OFF `
+              -DCMAKE_EXE_LINKER_FLAGS="/DEFAULTLIB:runtimeobject.lib" `
               -DVCPKG_ROOT=C:\vcpkg-mega `
               -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
               -S . -B build-x64-windows-mega
